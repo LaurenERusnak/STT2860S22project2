@@ -1,0 +1,267 @@
+---
+title: "Intro to Reshaping with Separate/Unite and Pivot"
+subtitle: "STT2860 Intro to Data Management and Vis S22"
+author: "Author: Lauren Rusnak"
+date: "`r format(Sys.time(), '%A, %B %d, %Y @ %I:%M %p')`"
+output: 
+  html_document: 
+    theme: cosmo
+    highlight: textmate
+---
+
+```{r globaloptions, include = FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE,
+  comment = NA
+)
+```
+<hr>
+
+This worksheet is meant to be used with:
+
+* [RDS CH12 Tidy data](https://r4ds.had.co.nz/tidy-data.html)
+* [dplyr: separate and unite](https://youtu.be/ztcsf7G4S78) (video)
+* [How to reshape data with tidyr’s new pivot functions](https://youtu.be/gnUgSkKEW5c) (video)
+* [Function reference for tidyr](https://tidyr.tidyverse.org/reference/index.html)
+
+## Packages Used
+
+```{r}
+library(tidyverse)
+library(skimr) # for skim function
+```
+
+## Datasets Used
+
+Example datasets used in **RDS CH12** from the **tidyr** package.
+
+```{r}
+table1
+table2
+table3
+table4a
+table4b
+```
+
+Example dataset from Dr. Thomley's Class Data Files (linked from AsULearn).
+
+```{r}
+powerball <- read_csv("https://raw.githubusercontent.com/STAT-JET-ASU/Datasets/master/Instructor/powerballnumbers.csv")
+head(powerball)
+```
+
+Example dataset originally from the Kaggle repo [Netflix Movies and TV Shows](https://www.kaggle.com/shivamb/netflix-shows).
+
+```{r}
+netflix <- read_csv("https://raw.githubusercontent.com/STAT-JET-ASU/Datasets/master/Kaggle/netflix_2021_10_01.csv")
+head(netflix)
+```
+
+## Separating and Uniting Columns
+
+### `separate()`
+
+Separating the character `drawdata` variable into 3 character vectors for `month`, `day`, and `year`. 
+- New variable if named the same as an og column will overwrite that og column.
+- `convert` = TRUE means that the character value will be converted to the highest possible type the data can be, in this case the character is converted to integer
+
+
+```{r}
+powerball2 <- powerball %>%
+  separate(
+    col = drawdate, # which column to separate
+    into = c("month", "day", "year"), # names of new columns, must be in quotes
+    sep = "/", # how numbers/data is separated in the og column
+    remove = TRUE, # Default is shown. to keep original column, use FALSE
+    convert = FALSE, # Default so can erase
+    extra = "warn", # Default so can erase
+    fill = "warn" # Default so can erase
+)
+head(powerball2)
+```
+
+### `unite()`
+
+Ex.  dataset has separate day, month and year, but we want one variable
+
+```{r}
+powerball3 <- powerball2 %>%
+  unite(
+    col = "datedraw", 
+    month:year, # can use colon if columns are in order
+    sep = "-"
+  )
+head(powerball3)
+```
+
+```{r}
+powerball_united2 <- powerball2 %>%
+  unite(
+    col = "datedraw", 
+    c(year, month, day), # can use colon if columns are in order
+    sep = "-"
+  )
+head(powerball_united2)
+```
+
+## Pivoting the Data "Rectangle"
+
+### `pivot_longer()`
+Using `table4a` I want to make `year` a variable, I can work with in R. Rn the years are variable names. My final dataset should have 3 variable `country`, ` year`, and the values from `1999` and `2000` columns.
+
+Afghanistan 1999 745
+Afghanistan 2000 2666
+etc...
+
+```{r}
+table4a
+
+```
+
+Now `year` will be a piece of info (variable), not variable names.
+
+The old (outdated) function for this was `gather()`. It still works, but has been replaced by `pivot_longer`.
+
+```{r}
+table4a_long <- table4a %>%
+  pivot_longer(
+    cols = `1999` : `2000`, # what columns are getting stacked up
+    names_to = "year",      # where will the column names go to
+    values_to = "cases"     # what is the new name of the stacked data
+  )
+table4a_long
+```
+
+```{r}
+table4b
+```
+
+```{r}
+table4b_long <- table4b %>%
+  pivot_longer(
+    cols = `1999` : `2000`, # what columns are getting stacked up
+    names_to = "year",      # where will the column names go to
+    values_to = "population"     # what is the new name of the stacked data
+  )
+
+table4b_long
+```
+
+
+Now we join the two tables!
+
+- `inner_join()`
+- `left_join()`
+- `right_join()`
+- `full_join()`
+- `semi_join()`
+- `anti_join()`
+
+
+
+
+```{r}
+full_join(x = table4a_long, 
+          y = table4b_long,
+          by = c("country", "year")
+          )
+```
+
+
+### `pivot_wider()`
+
+```{r}
+table2
+```
+ 
+Create a new column of `rate = cases / population` using `mutate()`
+
+```{r}
+table2_wider <- table2 %>%
+  pivot_wider(
+    names_from = type,    # my new columns will be named cases and population
+    values_from = count,  # what colum values are going to fill my new columns
+  ) %>%
+  mutate(rate = cases / population * 10000)
+
+table2_wider
+```
+
+
+## Netflix Example
+
+### `separate()` movie categories
+
+Let's first try four categories...
+
+We'll look at a few rwos with `head()` and us `skim()` to find `NA` values. Keep the separated column for nowso we an verify our code.
+
+```{r}
+netflix_4cat <- netflix %>%
+  separate(
+    col = listed_in,
+    into = c("cat1", "cat2", "cat3", "cat4"),
+    sep = ",",
+    remove = FALSE
+  )
+```
+
+```{r}
+head(netflix_4cat, n = 10)
+
+netflix_4cat %>% 
+  select(cat1:cat4) %>% 
+  skim()
+```
+
+
+
+We can reduce the number of categories...
+since it seems as if no show has a cat4
+
+```{r}
+netflix_3cat <- netflix %>%
+  separate(
+    col = listed_in,
+    into = c("cat1", "cat2", "cat3"),
+    sep = ",",
+    remove = FALSE
+  )
+```
+
+```{r}
+head(netflix_3cat, n = 10)
+
+netflix_3cat %>% 
+  select(cat1:cat3) %>% 
+  skim()
+```
+
+
+Use `pivot_longer()` to put all the categories in the same column.
+
+```{r}
+netflix_3cat_long <- netflix_3cat %>%
+  pivot_longer(
+    cols = c("cat1", "cat2", "cat3"),
+    names_to = "cat_order",
+    values_to = "cat_name"
+  )
+
+netflix_3cat_long %>%
+  count(cat_name)
+```
+
+Remove any rows that have `NA` values in the new column you created.
+
+Filter to get rid of rows that have NA as a `cat_name`
+
+```{r}
+netflix_3cat_long
+```
+
+<hr>
+```{r}
+sessionInfo()
+```
