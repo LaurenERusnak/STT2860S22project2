@@ -1,6 +1,6 @@
 ---
 title: "Project 2C: Galton Data"
-author: "PUT YOUR NAME HERE"
+author: "Cooper Bodford, Alex Dodds, Zachary Dove, Lauren Rusnak"
 date: '`r format(Sys.time(), "%A, %B %d, %Y @ %I:%M %p")`'
 output: 
   html_document: 
@@ -23,7 +23,8 @@ knitr::opts_chunk$set(
 ### Packages Used
 
 ```{r loadpackages}
-
+library(tidyverse)
+library(skimr)
 ```
 
 ### Datasets Used
@@ -35,20 +36,92 @@ Francis Galton, a cousin of Charles Darwin, studied the relationship between par
 #### Galton Main Dataset
 
 ```{r loadmaindata}
-
+galton_main_dataset <- read.csv("../data/galtonfamiliesmain.csv", na.string = c(""))
+glimpse(galton_main_dataset)
 ```
+
+```{r}
+data_main <- galton_main_dataset %>%
+  mutate(
+    familyID = as.numeric(ifelse(FamilyID == "136A", 205, FamilyID)),
+    motherT = Mother * 1.08,
+    midparent = (Father + motherT) / 2,
+    heightT = ifelse(Child == "Daughter", Height * 1.08, Height)
+  ) %>%
+  select(
+    familyID,
+    child_num = Children,
+    father = Father,
+    mother = Mother,
+    motherT,
+    midparent,
+    child_gen = Child,
+    height = Height,
+    heightT
+  ) %>%
+  arrange(
+    familyID,
+    desc(child_gen),
+    desc(height)
+  )
+glimpse(data_main)
+```
+
+
 
 #### Galton Subset Dataset
 
 ```{r loadsubdata}
-
+galton_sub_dataset <- read.csv("../data/galtonfamiliessub.csv", na.string = c(""))
+glimpse(galton_sub_dataset)
 ```
+
+```{r}
+data_sub <- galton_sub_dataset %>%
+  mutate(
+    father = FatherR + 60,
+    mother = MotherR + 60,
+    motherT = mother * 1.08,
+    midparent = (father + motherT) / 2,
+    height = HeightR + 60,
+    heightT = ifelse(Child == "Daughter", height * 1.08, height)
+  ) %>%
+  select(
+    familyID = FamilyID,
+    child_num = Children,
+    father,
+    mother,
+    motherT,
+    midparent,
+    child_gen = Child,
+    height,
+    heightT
+  ) %>%
+  arrange(
+    familyID,
+    desc(child_gen),
+    desc(height)
+  )
+ glimpse(data_sub)
+```
+
+
 
 #### Galton Notebook Dataset
 
 ```{r loadnotebook}
-
+galton_notes_dataset <- read.csv("https://raw.githubusercontent.com/STAT-JET-ASU/Datasets/master/Instructor/galtonfamiliesnotebook.csv", na.string = c(""), stringsAsFactors = FALSE)
+glimpse(galton_notes_dataset)
 ```
+
+
+```{r}
+galton_pages <- galton_notes_dataset %>%
+  transmute(familyID = as.integer(FamilyID), Page)
+galton_pages[is.na(galton_pages)] = 205
+glimpse(galton_pages)
+```
+
 
 <hr>
 
@@ -75,16 +148,53 @@ Load the three Galton datasets and use `glimpse()` to explore their structures. 
    * sons before daughters within family
    * in order of height within each sex of child
 
-```{r assembledata1}
 
+```{r}
+names(data_sub) == names(data_main)
 ```
+
+
+```{r assembledata1}
+data_main_sub <- bind_rows(data_main, data_sub)
+glimpse(data_main_sub)
+head(data_main_sub)
+```
+
+```{r}
+data_joined <- data_main_sub %>%
+left_join(galton_pages, by = c("familyID" = "familyID")) %>%
+    select(
+      familyid = familyID,
+      page = Page,
+      num_children = child_num,
+      father_ht = father,
+      mother_ht = motherT,
+      midparent,
+      child_sex = child_gen,
+      child_ht = heightT
+  ) %>%
+  arrange(familyid,
+          desc(child_sex),
+          child_ht)
+glimpse(data_joined)
+head(data_joined)
+```
+
 
 #### Dataset #2
 
 From Dataset #1, select the variables `familyid` and `num_children`, then reduce the dataset so it contains only one unique row per family. Use `glimpse()` to display the result. (Hint: The final dataset should have 205 rows/observations and two variables/columns.)
 
 ```{r assembledata2}
+data_reduced <- data_joined %>%
+    select(
+    familyid,
+    num_children
+  ) %>%
+  distinct(familyid, .keep_all = TRUE)
 
+glimpse(data_reduced)
+head(data_reduced)
 ```
 
 ### Visualization 1: Updated Scatterplot
@@ -118,7 +228,22 @@ Include the following.
 * use `theme()` to move the legend to the bottom of the scatterplot
 
 ```{r updatedscatterplot}
-
+data_joined %>%
+  ggplot(aes(x = child_ht, y = midparent, color = child_sex)) +
+  scale_color_manual(values = c('deeppink', 'blue2')) +
+  geom_point(size = 4, alpha = 0.4) +
+  scale_x_continuous(breaks = c(56:82)) +
+  scale_y_continuous(breaks = c(56:82)) +
+  coord_fixed() +
+  labs(
+    y = "Average Height of Parents (in)",
+    x = "Child Height (in)",
+    title = "Child Height vs. Average Height of Parents",
+    color = "Gender of Child:"
+  ) +
+  theme_linedraw() +
+  theme(legend.position = "bottom")
+  
 ```
 
 ### Visualization 2: Number of Children
@@ -127,31 +252,46 @@ Include the following.
 
 Create a barplot to show the distribution of the number of children per family. Set the bars to something other than the default `width`. Scale the x-axis so that there is a tick mark for each bar. Choose appropriate colors, labels, themes, and/or and other types of formatting that you feel will enhance the meaning or visual appearance of the plot.  (Hint: Use `count()` to find out how many families have a given number of children, then use that information to create your plot.)
 
-```{r childrenbarplot}
+```{r}
+data_reduced_count <- count(data_reduced, num_children)
+data_reduced_count
+```
 
+
+```{r childrenbarplot}
+data_reduced_count %>%
+  ggplot(aes(x = num_children, y = n, width = 0.5)) +
+  geom_col(fill = 'darkorchid3') +
+  scale_x_continuous(breaks = c(1:15)) +
+  scale_y_continuous(breaks = c(0:32)) +
+  theme_linedraw() +
+  labs(title = "Number of Families with Number of Children",
+       x = "Number of Children",
+       y = "Number of Families")
 ```
 
 <hr>
 
 ## Questions
 
-**Question 1:** Do you think your scatterplot is an improvement over Galton's original diagram? Are there any other modifications and/or additions you would make to enhance the clarity or usefulness of your plot?
+**Question 1:** Do you think your scatter plot is an improvement over Galton's original diagram? Are there any other modifications and/or additions you would make to enhance the clarity or usefulness of your plot?
 
 **ANSWER**
 
-ERASE THIS TEXT AND ANSWER QUESTION HERE
+I think that the scatter plot we made was more intuitive and easier to understand. The original visualization is so busy I don't see the correlation between the height of the parents and their children. To improve the scatter plot we made, we suggest adding a trend line to better show this relationship.
 
-**Question 2:** Explain the rationale behind the choices you made when creating your scatterplot and barplot, such as size, color, transparency, or other features. What motivated your decisions? 
+**Question 2:** Explain the rationale behind the choices you made when creating your scatter plot and bar plot, such as size, color, transparency, or other features. What motivated your decisions? 
 
 **ANSWER**
 
-ERASE THIS TEXT AND ANSWER QUESTION HERE
+We made our dots in the scatter plot fairly transparent so that the density of dots could be displayed. This distinguishes the trend from outlines better. We also se the size to be bigger so that the density could also be displayed. We also used pink and blue colors as those are traditional colors associated with boys and girls which can easily be inferred by all viewers. All of these choices were made to better show the relationship between the midparent height and the child height.
+For the bar plot we made sure to use a different color, so it would not be confused with the sex of the children.
 
 **Question 3:** Considering best practices, how does using `coord_fixed()` enhance the authenticity of the information shown in the scatterplot, such as the relationship and spread of the data?
 
 **ANSWER**
 
-ERASE THIS TEXT AND ANSWER QUESTION HERE
+The `coord_fixed()` function more accurately depicts the relationship because the scale is equal on both axes. The correlation of the two variables may be misleading at first glance, and would require more thought when interpreting the visualization.  The `coord_fixed()` function makes the visualization much easier to interpret.
 
 ***
 ```{r}
